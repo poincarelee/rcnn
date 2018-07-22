@@ -23,9 +23,10 @@ class pascal_voc(imdb):
                         'sheep', 'sofa', 'train', 'tvmonitor')
         self.classes_idx = dict(zip(self.classes, range(len(self.classes))))
         self.image_ext = '.jpg'
+        self.cache_path = 'C:/Users/SRC/PycharmProjects/RCNN_caffe/cache'
         # image set file names
         self.image_index = self.load_image_set_index()
-        self.cache_path = '../cache'
+        self.rois = self.load_rois()
 
     def load_image_set_index(self):
         # for example: VOCdevkit/VOC2007/ImageSets/Main/train.txt
@@ -69,7 +70,7 @@ class pascal_voc(imdb):
 
         images = []
         # x, y, w, h, label
-        boxes = np.zeros((num_objs, 4), dtype=np.uint16)
+        boxes = np.zeros((num_objs, 4), dtype=np.int32)
         gt_classes = np.zeros((num_objs), dtype=np.int32)
         overlaps = np.zeros((num_objs, len(self.classes)), dtype=np.float32)
 
@@ -99,6 +100,25 @@ class pascal_voc(imdb):
             'gt_classes': gt_classes,
             'gt_overlaps': overlaps,
         }
+
+    def load_ss_rois(self):
+        # load the selective search regions of image set
+        cache_file = os.path.join(self.cache_path, self.name + '_ss_roidb.pkl')
+        if os.path.exists(cache_file):
+            print('Load ss roidb from {}'.format(cache_file))
+            with open(cache_file, 'rb') as f:
+                ss_roidb = pickle.load(f)
+            print('Load finished')
+            return ss_roidb
+        ss_roidb = []
+        for i in range(len(self.image_index)):
+            ss_roi = self.load_ss_roi(self.image_index[i])
+            ss_roidb.append(ss_roi)
+            utils.view_bar('Load ss roidb from {}'.format(self.image_index[i] + '.xml'), i, len(self.image_index))
+        with open(cache_file, 'wb') as f:
+            pickle.dump(ss_roidb, f, pickle.HIGHEST_PROTOCOL)
+        print('Write ss roidb to {}'.format(cache_file))
+        return ss_roidb
 
     def load_ss_roi(self, index):
         # load the selective search regions of one image
@@ -134,9 +154,9 @@ class pascal_voc(imdb):
                 iou = utils.IOU(r['rect'], t[0])
                 iou_boxes[j][i] = iou
         # get the maximum iou index for each column
-        argmaxes = iou_boxes.argmax(axis=1)
+        argmaxes = iou_boxes.argmax(axis=0)
         # get the maximum iou for each column
-        maxes = iou_boxes.max(axis=1)
+        maxes = iou_boxes.max(axis=0)
         I = np.where(maxes > 0)[0]
         overlaps[I, gt_roi['gt_classes'][argmaxes[I]]] = maxes[I]
 
@@ -148,6 +168,20 @@ class pascal_voc(imdb):
             'gt_overlaps': overlaps,
         }
 
+    def load_rois(self):
+        # load both the ground truth and the selective search regions of image set
+        gt_rois = self.load_gt_rois()
+        ss_rois = self.load_ss_rois()
+        # merge them
+        for i in range(len(gt_rois)):
+            # merge boxes by row
+            gt_rois[i]['boxes'] = np.vstack((gt_rois[i]['boxes'], ss_rois[i]['boxes']))
+            # merge gt_classes by column
+            gt_rois[i]['gt_classes'] = np.hstack((gt_rois[i]['gt_classes'], ss_rois[i]['gt_classes']))
+            # merge gt_overlaps by row
+            gt_rois[i]['gt_overlaps'] = scipy.sparse.vstack([gt_rois[i]['gt_overlaps'], ss_rois['gt_overlaps']])
+
+        return gt_rois
 
 
 

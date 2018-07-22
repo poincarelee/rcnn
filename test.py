@@ -103,6 +103,8 @@ import utils.utils as utils
 
 pascal = pascal_voc('train', '2007', './VOCdevkit')
 
+print(pascal.image_index)
+
 gt_roi = pascal.load_gt_roi('000001')
 labels = []
 for i in gt_roi['gt_classes']:

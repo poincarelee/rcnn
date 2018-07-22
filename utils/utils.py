@@ -62,7 +62,7 @@ def if_intersection(xmin_a, xmax_a, ymin_a, ymax_a, xmin_b, xmax_b, ymin_b, ymax
 # IOU
 def IOU(box1, box2):
     area_inter = if_intersection(box1[0], box1[2], box1[1], box1[3],
-                                 box2[0], box2[2], box2[1], bpx2[3])
+                                 box2[0], box2[2], box2[1], box2[3])
     if area_inter:
         area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
         area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])

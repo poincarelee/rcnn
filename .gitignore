@@ -1,3 +1,4 @@
 VOCdevkit
 cache
 .idea
+*.pyc
