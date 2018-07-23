@@ -50,5 +50,6 @@ class SolverWrapper(object):
         net.params['bbox_pred'][1].data[...] = biases
 
     # train the caffe model
-    def train_model(self, max_iters):
+    # def train_model(self, max_iters):
+
 
