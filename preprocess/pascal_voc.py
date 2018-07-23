@@ -26,6 +26,18 @@ class pascal_voc(imdb):
         self.cache_path = 'C:/Users/SRC/PycharmProjects/RCNN_caffe/cache'
         # image set file names
         self.image_index = self.load_image_set_index()
+        # roidb
+        # key and value
+        # boxes: box location, (box_num, 4)
+        # gt_overlaps: all boxes' scores in different classes, (box_num, class_num)
+        # gt_classes: all boxes' true label, (box_num,)
+        # flipped: whether flipped
+        # image: image path
+        # width: image width
+        # height: image height
+        # max_overlaps: each box's maximum score in all classes, (box_num,)
+        # max_classes: each box's label which has maximum score, (box_num,)
+        # bbox_targets: each box's label and the nearest ground truth's box location, (5,) => (c, tx, ty, tw, th)
         self.rois = self.load_rois()
 
     def load_image_set_index(self):
@@ -60,6 +72,8 @@ class pascal_voc(imdb):
     def load_gt_roi(self, index):
         # load the ground truth regions of one image
         filename = os.path.join(self.data_path, 'Annotations', index + '.xml')
+        # image path
+        img_path = os.path.join(self.data_path, 'JPEGImages', index + '.jpg')
 
         # parse xml file
         with open(filename) as f:
@@ -68,7 +82,6 @@ class pascal_voc(imdb):
         objs = data.getElementsByTagName('object')
         num_objs = len(objs)
 
-        images = []
         # x, y, w, h, label
         boxes = np.zeros((num_objs, 4), dtype=np.int32)
         gt_classes = np.zeros((num_objs), dtype=np.int32)
@@ -86,16 +99,14 @@ class pascal_voc(imdb):
             gt_classes[i] = cls
             overlaps[i, cls] = 1.0
             # load the original image
-            img_path = os.path.join(self.data_path, 'JPEGImages', index + '.jpg')
-            img = skimage.io.imread(img_path)
-            cliped_img = utils.clip_pic(img, boxes[i, :])
-            resized_img = utils.resize_img(cliped_img, 227, 227)
-            float_img = np.asarray(resized_img, dtype=np.float32)
-            images.append(float_img)
+            # img = skimage.io.imread(img_path)
+            # cliped_img = utils.clip_pic(img, boxes[i, :])
+            # resized_img = utils.resize_img(cliped_img, 227, 227)
+            # float_img = np.asarray(resized_img, dtype=np.float32)
 
         overlaps = scipy.sparse.csr_matrix(overlaps)
         return {
-            'images': images,
+            'image': img_path,
             'boxes': boxes,
             'gt_classes': gt_classes,
             'gt_overlaps': overlaps,
@@ -122,10 +133,9 @@ class pascal_voc(imdb):
 
     def load_ss_roi(self, index):
         # load the selective search regions of one image
-        filename = os.path.join(self.data_path, 'JPEGImages', index + '.jpg')
-        images = []
+        img_path = os.path.join(self.data_path, 'JPEGImages', index + '.jpg')
         boxes = []
-        img = skimage.io.imread(filename)
+        img = skimage.io.imread(img_path)
         _, regions = ss.selective_search(img, scale=500, sigma=0.9, min_size=10)
         overlaps = np.zeros((len(regions), len(self.classes)), dtype=np.float32)
         # ground truth
@@ -144,10 +154,9 @@ class pascal_voc(imdb):
             candidates.add(r['rect'])
             boxes.append(r['rect'])
             # resize the box
-            cliped_img = utils.clip_pic(img, r['rect'])
-            resized_img = utils.resize_img(img, 227, 227)
-            float_img = np.asarray(resized_img, dtype=np.float32)
-            images.append(float_img)
+            # cliped_img = utils.clip_pic(img, r['rect'])
+            # resized_img = utils.resize_img(img, 227, 227)
+            # float_img = np.asarray(resized_img, dtype=np.float32)
 
             for j, t in enumerate(zip(gt_roi['boxes'], gt_roi['gt_classes'])):
                 # t[0] box, t[1] gt_class
@@ -162,7 +171,7 @@ class pascal_voc(imdb):
 
         overlaps = scipy.sparse.csr_matrix(overlaps)
         return {
-            'images': images,
+            'image': img_path,
             'boxes': boxes,
             'gt_classes': np.zeros((len(regions),), dtype=np.int32),
             'gt_overlaps': overlaps,
@@ -179,7 +188,7 @@ class pascal_voc(imdb):
             # merge gt_classes by column
             gt_rois[i]['gt_classes'] = np.hstack((gt_rois[i]['gt_classes'], ss_rois[i]['gt_classes']))
             # merge gt_overlaps by row
-            gt_rois[i]['gt_overlaps'] = scipy.sparse.vstack([gt_rois[i]['gt_overlaps'], ss_rois['gt_overlaps']])
+            gt_rois[i]['gt_overlaps'] = scipy.sparse.vstack([gt_rois[i]['gt_overlaps'], ss_rois[i]['gt_overlaps']])
 
         return gt_rois
 
