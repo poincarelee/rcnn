@@ -35,6 +35,7 @@ class SolverWrapper(object):
 
         # do the scale and shift operation
         # I'm not sure whether it is correct
+
         net.params['bbox_pred'][1].data[...] = net.params['bbox_pred'][1].data * self.stds + self.means * net.params['bbox_pred'][0].data
         net.params['bbox_pred'][0].data[...] = net.params['bbox_pred'][0].data * self.stds
 
@@ -50,3 +51,4 @@ class SolverWrapper(object):
 
     # train the caffe model
     def train_model(self, max_iters):
+
