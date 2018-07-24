@@ -7,6 +7,7 @@ import utils.utils as utils
 import skimage.io
 import selective_search.selective_search as ss
 import scipy.sparse
+import config
 
 class pascal_voc(imdb):
     def __init__(self, image_set, year, devkit_path):
@@ -23,11 +24,11 @@ class pascal_voc(imdb):
                         'sheep', 'sofa', 'train', 'tvmonitor')
         self.classes_idx = dict(zip(self.classes, range(len(self.classes))))
         self.image_ext = '.jpg'
-        self.cache_path = 'C:/Users/SRC/PycharmProjects/RCNN_caffe/cache'
+        self.cache_path = config._cache_path
         # image set file names
         self.image_index = self.load_image_set_index()
-        # roidb
-        # key and value
+        # roidb definition
+        # key and value(may not include all the keys)
         # boxes: box location, (box_num, 4)
         # gt_overlaps: all boxes' scores in different classes, (box_num, class_num)
         # gt_classes: all boxes' true label, (box_num,)
@@ -37,7 +38,8 @@ class pascal_voc(imdb):
         # height: image height
         # max_overlaps: each box's maximum score in all classes, (box_num,)
         # max_classes: each box's label which has maximum score, (box_num,)
-        # bbox_targets: each box's label and the nearest ground truth's box location, (5,) => (c, tx, ty, tw, th)
+        # bbox_targets: each box's label and the nearest ground truth's box location, (box_num, 5) => (c, tx, ty, tw, th)
+        # gt_idx: each box's nearest ground truth's index, (box_num,)
         self.rois = self.load_rois()
 
     def load_image_set_index(self):
@@ -83,9 +85,13 @@ class pascal_voc(imdb):
         num_objs = len(objs)
 
         # x, y, w, h, label
-        boxes = np.zeros((num_objs, 4), dtype=np.int32)
+        boxes = np.zeros((num_objs, 4), dtype=np.float32)
         gt_classes = np.zeros((num_objs), dtype=np.int32)
-        overlaps = np.zeros((num_objs, len(self.classes)), dtype=np.float32)
+        gt_overlaps = np.zeros((num_objs, len(self.classes)), dtype=np.float32)
+        max_classes = np.zeros((num_objs), dtype=np.int32)
+        # with itself overlap is 1.0
+        max_overlaps = np.ones((num_objs), dtype=np.float32)
+        gt_idxs = np.zeros((num_objs), dtype=np.int32)
 
         for i, obj in enumerate(objs):
             x1 = float(obj.getElementsByTagName('xmin')[0].childNodes[0].data) - 1
@@ -97,19 +103,24 @@ class pascal_voc(imdb):
             cls = self.classes_idx[class_name]
             boxes[i, :] = [x1, y1, x2, y2]
             gt_classes[i] = cls
-            overlaps[i, cls] = 1.0
+            gt_overlaps[i, cls] = 1.0
+            max_classes[i] = cls
+            gt_idxs[i] = i
             # load the original image
             # img = skimage.io.imread(img_path)
             # cliped_img = utils.clip_pic(img, boxes[i, :])
             # resized_img = utils.resize_img(cliped_img, 227, 227)
             # float_img = np.asarray(resized_img, dtype=np.float32)
 
-        overlaps = scipy.sparse.csr_matrix(overlaps)
+        gt_overlaps = scipy.sparse.csr_matrix(gt_overlaps)
         return {
             'image': img_path,
             'boxes': boxes,
             'gt_classes': gt_classes,
-            'gt_overlaps': overlaps,
+            'gt_overlaps': gt_overlaps,
+            'max_classes': max_classes,
+            'max_overlaps': max_overlaps,
+            'gt_idxs': gt_idxs,
         }
 
     def load_ss_rois(self):
@@ -137,7 +148,7 @@ class pascal_voc(imdb):
         boxes = []
         img = skimage.io.imread(img_path)
         _, regions = ss.selective_search(img, scale=500, sigma=0.9, min_size=10)
-        overlaps = np.zeros((len(regions), len(self.classes)), dtype=np.float32)
+        gt_overlaps = np.zeros((len(regions), len(self.classes)), dtype=np.float32)
         # ground truth
         gt_roi = self.load_gt_roi(index)
         # calculate iou between every region and every ground truth
@@ -167,14 +178,19 @@ class pascal_voc(imdb):
         # get the maximum iou for each column
         maxes = iou_boxes.max(axis=0)
         I = np.where(maxes > 0)[0]
-        overlaps[I, gt_roi['gt_classes'][argmaxes[I]]] = maxes[I]
-
-        overlaps = scipy.sparse.csr_matrix(overlaps)
+        gt_overlaps[I, gt_roi['gt_classes'][argmaxes[I]]] = maxes[I]
+        max_classes = gt_overlaps.argmax(axis=1)
+        max_overlaps = gt_overlaps.max(axis=1)
+        gt_overlaps = scipy.sparse.csr_matrix(gt_overlaps)
         return {
             'image': img_path,
-            'boxes': boxes,
-            'gt_classes': np.zeros((len(regions),), dtype=np.int32),
-            'gt_overlaps': overlaps,
+            'boxes': np.array(boxes, dtype=np.float32),
+            # to discriminate this is selective search region
+            'gt_classes': np.zeros((len(regions)), dtype=np.int32),
+            'gt_overlaps': gt_overlaps,
+            'max_classes': max_classes,
+            'max_overlaps': max_overlaps,
+            'gt_idxs': argmaxes,
         }
 
     def load_rois(self):
@@ -182,6 +198,7 @@ class pascal_voc(imdb):
         gt_rois = self.load_gt_rois()
         ss_rois = self.load_ss_rois()
         # merge them
+        # ground truth are followed by selective search regions
         for i in range(len(gt_rois)):
             # merge boxes by row
             gt_rois[i]['boxes'] = np.vstack((gt_rois[i]['boxes'], ss_rois[i]['boxes']))
@@ -189,7 +206,12 @@ class pascal_voc(imdb):
             gt_rois[i]['gt_classes'] = np.hstack((gt_rois[i]['gt_classes'], ss_rois[i]['gt_classes']))
             # merge gt_overlaps by row
             gt_rois[i]['gt_overlaps'] = scipy.sparse.vstack([gt_rois[i]['gt_overlaps'], ss_rois[i]['gt_overlaps']])
-
+            # merge max_classes by column
+            gt_rois[i]['max_classes'] = np.hstack((gt_rois[i]['max_classes'], ss_rois[i]['max_classes']))
+            # merge max_overlaps by column
+            gt_rois[i]['max_overlaps'] = np.hstack((gt_rois[i]['max_overlaps'], ss_rois[i]['max_overlaps']))
+            # merge gt_idxs by column
+            gt_rois[i]['gt_idxs'] = np.hstack((gt_rois[i]['gt_idxs'], ss_rois[i]['gt_idxs']))
         return gt_rois
 
 

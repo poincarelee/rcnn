@@ -7,6 +7,8 @@ import numpy as np
 import os
 from caffe.proto import caffe_pb2
 import google.protobuf as pb2
+import config
+import utils.utils as utils
 
 class SolverWrapper(object):
     def __init__(self, solver_prototxt, roidb, output_dir, pretrained_model=None):
@@ -17,6 +19,8 @@ class SolverWrapper(object):
             print('Load pretrained model weights from {}').format(pretrained_model)
             self.solver.net.copy_from(pretrained_model)
 
+        print('Compute bounding box regression targets...')
+        self.means, self.stds = utils.add_bbox_targets_db(roidb, config._finetune_threshold)
         # load solver parameters from file
         self.solver_param = caffe_pb2.SolverParameter()
         with open(solver_prototxt, 'rt') as f:
@@ -50,6 +54,22 @@ class SolverWrapper(object):
         net.params['bbox_pred'][1].data[...] = biases
 
     # train the caffe model
-    # def train_model(self, max_iters):
+    def train_model(self, max_iters):
+        last_snapshot_iter = -1
+        while self.solver.iter < max_iters:
+            # make one SGD update
+            self.solver.step(1)
+            if self.solver.iter % config._snapshot_interval == 0:
+                last_snapshot_iter = self.solver.iter
+                self.snap_shot()
+        if last_snapshot_iter != self.solver.iter:
+            self.snap_shot()
+
+
+
+
+
+
+
 
 

@@ -4,5 +4,8 @@
 # @FileName: config.py.py
 
 _caffe_root = 'C:/caffe'
-_cache_path = 'C:/Users/SRC/PycharmProjects/RCNN_caffe/cache'
-
+_cache_path = 'C:/Users/ruichenshao/PycharmProjects/rcnn/cache'
+_snapshot_interval = 1000
+_finetune_threshold = 0.5
+_svm_threshold = 0.3
+_num_classes = 21
