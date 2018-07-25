@@ -132,44 +132,44 @@ def add_bbox_targets(rois, threshold):
 
     return targets
 
-# make datum, the unit of lmdb
-def make_datum(img, label):
-    # image is numpy.ndarray format. BGR instead of RGB
-    return caffe_pb2.Datum(
-        channels=3,
-        width=227,
-        height=227,
-        label=label,
-        # translate from HWC to CHW
-        data=np.rollaxis(img, 2).tobytes()
-    )
-
-# create imdb
-def create_imdb(lmdb_path, roidb, threshold):
-    in_db = lmdb.open(lmdb_path)
-    # create db handler
-    with in_db.begin(write=True) as in_txn:
-        count = 0
-        for i, rois in enumerate(roidb):
-            # read image
-            # cv2 read BGR
-            # so we needn't to translate RBG to BGR
-            img = cv2.imread(rois['image'])
-            max_classes = rois['max_classes']
-            max_overlaps = rois['max_overlaps']
-            idx = np.where(max_overlaps >= threshold)
-            labels = np.zeros((len(max_classes)), dtype=np.int32)
-            labels[idx] = max_classes[idx]
-            for j, box in enumerate(rois['boxes']):
-                cliped_img = clip_pic(img, box)
-                resized_img = resize_img(cliped_img, 227, 227)
-                label = labels[j]
-
-                datum = make_datum(resized_img, label)
-                in_txn.put('{:0>5d}'.format(count), datum.SerializeToString())
-                print('{:0>5d}'.format(count) + ':' + rois['image'])
-                count += 1
-        in_db.close()
+# # make datum, the unit of lmdb
+# def make_datum(img, label):
+#     # image is numpy.ndarray format. BGR instead of RGB
+#     return caffe_pb2.Datum(
+#         channels=3,
+#         width=227,
+#         height=227,
+#         label=label,
+#         # translate from HWC to CHW
+#         data=np.rollaxis(img, 2).tobytes()
+#     )
+#
+# # create imdb
+# def create_imdb(lmdb_path, roidb, threshold):
+#     in_db = lmdb.open(lmdb_path)
+#     # create db handler
+#     with in_db.begin(write=True) as in_txn:
+#         count = 0
+#         for i, rois in enumerate(roidb):
+#             # read image
+#             # cv2 read BGR
+#             # so we needn't to translate RBG to BGR
+#             img = cv2.imread(rois['image'])
+#             max_classes = rois['max_classes']
+#             max_overlaps = rois['max_overlaps']
+#             idx = np.where(max_overlaps >= threshold)
+#             labels = np.zeros((len(max_classes)), dtype=np.int32)
+#             labels[idx] = max_classes[idx]
+#             for j, box in enumerate(rois['boxes']):
+#                 cliped_img = clip_pic(img, box)
+#                 resized_img = resize_img(cliped_img, 227, 227)
+#                 label = labels[j]
+#
+#                 datum = make_datum(resized_img, label)
+#                 in_txn.put('{:0>5d}'.format(count), datum.SerializeToString())
+#                 print('{:0>5d}'.format(count) + ':' + rois['image'])
+#                 count += 1
+#         in_db.close()
 
 
 

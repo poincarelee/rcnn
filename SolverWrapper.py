@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # @Time    : 7/23/2018 2:05 PM
 # @Author  : Ruichen Shao
-# @FileName: train.py.py
+# @FileName: SolverWrapper.py.py
 import caffe
 import numpy as np
 import os

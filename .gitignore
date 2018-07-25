@@ -2,3 +2,4 @@ VOCdevkit
 cache
 .idea
 *.pyc
+*.mdb
